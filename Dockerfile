@@ -132,8 +132,8 @@ RUN embuild.sh \
     X2tConverter/build/Qt/X2tConverter.pro
 
 WORKDIR /core/build/bin/linux_64/
-RUN cp x2t x2t.js
-RUN zip x2t.zip x2t.wasm x2t.js
+RUN cp x2t x2t.js 
+RUN zip x2t.zip x2t.wasm x2t.js x2t.wasm.br  
 RUN sha512sum x2t.zip > x2t.zip.sha512
 
 WORKDIR /
