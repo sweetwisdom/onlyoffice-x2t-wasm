@@ -160,3 +160,4 @@ COPY --from=build /core/build/bin/linux_64/x2t x2t.js
 COPY --from=build /core/build/bin/linux_64/x2t.wasm x2t.wasm
 COPY --from=build /core/build/bin/linux_64/x2t.zip x2t.zip
 COPY --from=build /core/build/bin/linux_64/x2t.zip.sha512 x2t.zip.sha512
+COPY --from=build /core/build/bin/linux_64/x2t.wasm.br x2t.wasm.br
