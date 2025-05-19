@@ -20,15 +20,37 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        
+      - name: Check Docker version
+        run: docker version
+        
+      - name: Check file permissions
+        run: |
+          cat embuild.sh
+          chmod +x embuild.sh
 
       - name: Build x2t WebAssembly
         run: |
           mkdir -p build results
+          
+          # 检查和修复 embuild.sh 文件权限
+          echo "修复 embuild.sh 文件权限"
+          chmod +x embuild.sh
+          
+          # 修改 Dockerfile 确保 embuild.sh 有执行权限
+          echo "修改 Dockerfile 添加执行权限"
+          sed -i 's/COPY embuild.sh \/bin\/embuild.sh/COPY embuild.sh \/bin\/embuild.sh\nRUN chmod +x \/bin\/embuild.sh/' Dockerfile
+          
           # 修改 build.sh 以移除不兼容的 --format docker 参数
+          echo "修改 build.sh 移除不兼容参数"
           sed -i 's/--format docker //g' build.sh
           chmod +x build.sh
+          
+          # 执行构建
           ./build.sh
-          ls -la build/
+          
+          # 如果构建目录存在，显示内容
+          ls -la build/ || echo "构建目录不存在或为空"
           
       - name: Set tag name
         id: tag
