@@ -1,64 +1,86 @@
-name: Build and Release x2t WebAssembly
-
-on:
-  push:
-    tags:
-      - 'v*'  # Trigger on version tags like v1.0.0
-  workflow_dispatch:  # Allow manual triggering
-
-jobs:
-  build-and-release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Needed for creating releases
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0  # Needed for proper git history handling
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build x2t WebAssembly
-        run: |
-          mkdir -p build results
-          ./build.sh
-          ls -la build/
-          
-      - name: Set tag name
-        id: tag
-        run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          else
-            echo "tag=latest-build-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_OUTPUT
-          fi
-          
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ steps.tag.outputs.tag }}
-          name: OnlyOffice x2t WebAssembly ${{ steps.tag.outputs.tag }}
-          draft: false
-          prerelease: false
-          files: |
-            build/x2t.js
-            build/x2t.wasm
-            build/x2t.wasm.br  
-            build/x2t.zip
-            build/x2t.zip.sha512
-          body: |
-            ## OnlyOffice x2t WebAssembly Build
-            
-            This release contains the WebAssembly build of OnlyOffice x2t converter.
-            
-            ### Files included:
-            - x2t.js - JavaScript interface file
-            - x2t.wasm - WebAssembly binary
-            - x2t.zip - Combined package with JS and WASM files
-            - x2t.zip.sha512 - SHA512 hash of the zip file
-            
-            Built using GitHub Actions on ${{ github.repository }} from commit ${{ github.sha }}
+name: Build OnlyOffice x2t WebAssembly  
+  
+on:  
+  push:  
+    branches: [ main, master ]  
+    tags: [ 'v*' ]  
+  pull_request:  
+    branches: [ main, master ]  
+  workflow_dispatch:  # 允许手动触发  
+  
+jobs:  
+  build:  
+    runs-on: ubuntu-latest  
+      
+    steps:  
+    - name: Checkout repository  
+      uses: actions/checkout@v3  
+      with:  
+        submodules: 'recursive'  # 确保获取所有子模块  
+        fetch-depth: 0  # 获取完整历史以便正确生成版本号  
+      
+    - name: Set up Docker Buildx  
+      uses: docker/setup-buildx-action@v2  
+      
+    - name: Cache Docker layers  
+      uses: actions/cache@v3  
+      with:  
+        path: /tmp/.buildx-cache  
+        key: ${{ runner.os }}-buildx-${{ github.sha }}  
+        restore-keys: |  
+          ${{ runner.os }}-buildx-  
+      
+    - name: Enable Brotli compression  
+      run: |  
+        sed -i 's/QMAKE_LFLAGS="-sUSE_ICU=1 -sALLOW_MEMORY_GROWTH -sSTACK_SIZE=128kb -sASSERTIONS=0 -sUSE_CLOSURE_COMPILER=1 -sERROR_ON_UNDEFINED_SYMBOLS=0"/QMAKE_LFLAGS="-sUSE_ICU=1 -sALLOW_MEMORY_GROWTH -sSTACK_SIZE=128kb -sASSERTIONS=0 -sUSE_CLOSURE_COMPILER=1 -sERROR_ON_UNDEFINED_SYMBOLS=0 -sBROTLI=1"/' embuild.sh  
+      
+    - name: Build x2t WebAssembly  
+      uses: docker/build-push-action@v4  
+      with:  
+        context: .  
+        push: false  
+        load: true  
+        tags: onlyoffice-x2t-wasm:latest  
+        cache-from: type=local,src=/tmp/.buildx-cache  
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max  
+        outputs: type=local,dest=./build  
+      
+    # 这个步骤是为了避免缓存无限增长的问题  
+    - name: Move cache  
+      run: |  
+        rm -rf /tmp/.buildx-cache  
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache  
+      
+    - name: Extract build artifacts  
+      run: |  
+        mkdir -p build  
+        docker create --name temp onlyoffice-x2t-wasm:latest  
+        docker cp temp:/x2t.js ./build/  
+        docker cp temp:/x2t.wasm ./build/  
+        docker cp temp:/x2t.zip ./build/  
+        docker cp temp:/x2t.wasm.br ./build/  
+        docker cp temp:/x2t.zip.sha512 ./build/  
+        docker rm temp  
+      
+    - name: Upload build artifacts  
+      uses: actions/upload-artifact@v3  
+      with:  
+        name: x2t-wasm  
+        path: |  
+          build/x2t.js  
+          build/x2t.wasm
+          build/x2t.wasm.br
+          build/x2t.zip  
+          build/x2t.zip.sha512  
+      
+    - name: Create Release  
+      if: startsWith(github.ref, 'refs/tags/')  
+      uses: softprops/action-gh-release@v1  
+      with:  
+        files: |  
+          build/x2t.js  
+          build/x2t.wasm  
+          build/x2t.zip  
+          build/x2t.zip.sha512  
+      env:  
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
